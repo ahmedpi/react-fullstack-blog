@@ -1,27 +1,14 @@
 import fs from 'fs';
+import path from 'path';
 import admin from 'firebase-admin';
 import express from 'express';
+import 'dotenv/config';
 import { db, connectToDb } from './db.js';
 import cors from 'cors';
 
-/*
-let articleInfo = [{
-    name: 'learn-react',
-    upvotes: 0,
-    comments: [],
-},
-{
-    name: 'learn-node',
-    upvotes: 0,
-    comments: [],
-},
-{
-    name: 'mongodb',
-    upvotes: 0,
-    comments: [],
-},
-]
-*/
+import { fileURLToPath } from 'url';
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const credentials = JSON.parse(
     fs.readFileSync('./credentials.json')
@@ -33,6 +20,11 @@ admin.initializeApp({
 
 const app = express();
 app.use(express.json());
+app.use(express.static(path.join(__dirname, '../build')));
+
+app.get(/^(?!\/api).+/, (req, res) => {
+    res.sendFile(path.join(__dirname, '../build/index.html'))
+});
 
 app.use(cors({
     origin: '*'
@@ -40,7 +32,7 @@ app.use(cors({
 
 app.use(async (req, res, next) => {
     const { authtoken } = req.headers;
-    
+
     if (authtoken) {
         try {
             req.user = await admin.auth().verifyIdToken(authtoken);
@@ -85,7 +77,7 @@ app.put('/api/articles/:name/upvote', async (req, res) => {
 
     if (article) {
         const upvoteIds = article.upvoteIds || [];
-        const canUpvote = uid && !upvoteIds.include(uid);
+        const canUpvote = uid && !upvoteIds.includes(uid);
 
         if (canUpvote) {
             await db.collection('articles').updateOne({ name }, {
@@ -106,7 +98,7 @@ app.post('/api/articles/:name/comments', async (req, res) => {
     const { name } = req.params;
     const { text } = req.body;
     const { email } = req.user;
-    
+
     await db.collection('articles').updateOne({ name }, {
         $push: { comments: { postedBy: email, text } }
     });
@@ -120,9 +112,11 @@ app.post('/api/articles/:name/comments', async (req, res) => {
     }
 });
 
+const PORT = process.env.PORT || 8000;
+
 connectToDb(() => {
     console.log('Successfully connected to database!');
-    app.listen(8000, () => {
-        console.log('Server is listening on port 8000');
+    app.listen(PORT, () => {
+        console.log('Server is listening on port ' + PORT);
     });
 });
